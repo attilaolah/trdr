@@ -149,13 +149,13 @@ CREATE TABLE exchange_info (
     -- Foreign keys:
     CONSTRAINT fk_last_update FOREIGN KEY (last_update) REFERENCES updates(id)
 );
-CREATE TABLE exchange_info_fiats (
-    id INTEGER REFERENCES exchange_info(id),
+CREATE TABLE exchange_fiats (
+    id INTEGER REFERENCES exchanges(id),
     symbol VARCHAR(3) REFERENCES fiats(symbol),
     PRIMARY KEY (id, symbol)
 );
-CREATE TABLE exchange_info_urls (
-    id INTEGER REFERENCES exchange_info(id),
+CREATE TABLE exchange_urls (
+    id INTEGER REFERENCES exchanges(id),
     website TEXT[] NOT NULL,
     twitter TEXT[] NOT NULL,
     blog TEXT[] NOT NULL,
