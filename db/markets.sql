@@ -15,9 +15,12 @@ CREATE TABLE updates (
     -- Query string used, e.g. 'sort=id&include_metals=true'
     query_parameters TEXT,
 
+    -- Raw response data. This is potentially cached.
+    response_sha256 varchar(64) NOT NULL,
+
     -- Values below are returned by the API.
 
-    -- Current timestamp (ISO 8601) on the server.
+    -- Current timestamp on the server.
     timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     -- An internal error code for the current error.
     -- If a unique platform error code is not available the HTTP status code is returned.
@@ -27,7 +30,10 @@ CREATE TABLE updates (
     -- Amount of time taken to generate this response.
     elapsed INTERVAL NOT NULL,
     -- Number of API call credits that were used for this call.
-    credit_count INTEGER NOT NULL
+    credit_count INTEGER NOT NULL,
+
+    -- Validation:
+    CONSTRAINT valid_response_sha256 CHECK (response_sha256 ~ '^[0-9a-f]{64}$')
 );
 
 -- API endpoint: /v1/fiat/map
@@ -118,7 +124,7 @@ CREATE TABLE exchanges (
 );
 
 -- API endpoint: /v1/exchanges/info
-CREATE TABLE exchange_info (
+CREATE TABLE exchange_infos (
     -- The unique CoinMarketCap ID for this exchange.
     id INTEGER PRIMARY KEY REFERENCES exchanges (id),
     -- Link to a CoinMarketCap hosted logo png for this exchange. 64px is default size returned.
