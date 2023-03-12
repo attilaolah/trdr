@@ -69,7 +69,7 @@ impl MetalUnit {
             let len = s.len();
             if name.len() >= len {
                 let end = name.len() - len;
-                if name[end..].eq_ignore_ascii_case(s) {
+                if name[end..].replace(" ", "_").eq_ignore_ascii_case(s) {
                     return name[..end].trim().to_string();
                 }
             }
