@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
+
+rust_binary(
+	name = "update_fiats",
+	srcs = ["src/bin/update_fiats.rs"],
+    deps = all_crate_deps(normal = True) + [
+		"//:trdr",
+	],
+    aliases = aliases(normal = True),
+	edition = "2021",
+)
+
+rust_library(
+	name = "trdr",
+	srcs = glob(["src/**/*.rs"]),
+    deps = all_crate_deps(normal = True),
+    compile_data = glob(["src/**/*.sql"]),
+    aliases = aliases(normal = True),
+	edition = "2021",
+)
