@@ -3,6 +3,7 @@ use serde::Deserialize;
 
 use crate::cmc::status::Status;
 
+pub mod fiat;
 pub mod status;
 
 const API_HEADER: &str = "X-CMC_PRO_API_KEY";
