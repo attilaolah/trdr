@@ -1,21 +1,24 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@com_github_bazelbuild_buildtools//buildifier:def.bzl", "buildifier")
 load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 rust_binary(
-	name = "update_fiats",
-	srcs = ["src/bin/update_fiats.rs"],
-    deps = all_crate_deps(normal = True) + [
-		"//:trdr",
-	],
+    name = "update_fiats",
+    srcs = ["src/bin/update_fiats.rs"],
     aliases = aliases(normal = True),
-	edition = "2021",
+    edition = "2021",
+    deps = all_crate_deps(normal = True) + [
+        "//:trdr",
+    ],
 )
 
 rust_library(
-	name = "trdr",
-	srcs = glob(["src/**/*.rs"]),
-    deps = all_crate_deps(normal = True),
-    compile_data = glob(["src/**/*.sql"]),
+    name = "trdr",
+    srcs = glob(["src/**/*.rs"]),
     aliases = aliases(normal = True),
-	edition = "2021",
+    compile_data = glob(["src/**/*.sql"]),
+    edition = "2021",
+    deps = all_crate_deps(normal = True),
 )
+
+buildifier(name = "buildifier")
