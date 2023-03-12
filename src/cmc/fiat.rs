@@ -6,34 +6,6 @@ use tokio_postgres::Client;
 
 use crate::error::Error;
 
-const INSERT_FIAT: &str = "INSERT INTO fiats (
-    id,
-    name,
-    sign,
-    symbol,
-    last_update
-) VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (id) DO UPDATE SET
-    name = excluded.name,
-    sign = excluded.sign,
-    symbol = excluded.symbol,
-    last_update = excluded.last_update
-";
-
-const INSERT_METAL: &str = "INSERT INTO metals (
-    id,
-    name,
-    code,
-    unit,
-    last_update
-) VALUES ($1, $2, $3, $4::metal_unit, $5)
-ON CONFLICT (id) DO UPDATE SET
-    name = excluded.name,
-    code = excluded.code,
-    unit = excluded.unit,
-    last_update = excluded.last_update
-";
-
 #[derive(Debug, Deserialize)]
 pub struct Fiat {
     id: i32,
@@ -54,7 +26,7 @@ impl Fiat {
             return self.insert_as_metal(pg, code, update).await;
         }
         pg.execute(
-            INSERT_FIAT,
+            include_str!("sql/fiats_insert.sql"),
             &[&self.id, &self.name, &self.sign, &self.symbol, &update],
         )
         .await?;
@@ -65,7 +37,7 @@ impl Fiat {
     async fn insert_as_metal(&self, pg: &Client, code: &str, update: i32) -> Result<(), Error> {
         let unit = MetalUnit::from_suffix(&self.name);
         pg.execute(
-            INSERT_METAL,
+            include_str!("sql/metals_insert.sql"),
             &[
                 &self.id,
                 &unit.trim_suffix(&self.name),

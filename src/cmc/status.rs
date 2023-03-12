@@ -16,22 +16,11 @@ pub struct Status {
     notice: Option<String>,
 }
 
-const INSERT_STATUS: &str = "INSERT INTO updates (
-    url,
-    error_code,
-    error_message,
-    credit_count,
-    timestamp,
-    elapsed,
-    notice
-) VALUES ($1, $2, $3, $4, $5, make_interval(secs => $6), $7)
-RETURNING id";
-
 impl Status {
     pub async fn insert(&self, pg: &Client, url: &str) -> Result<i32, Error> {
         Ok(pg
             .query_one(
-                INSERT_STATUS,
+                include_str!("sql/updates_insert.sql"),
                 &[
                     &url,
                     &self.error_code,

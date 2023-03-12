@@ -1,10 +1,7 @@
 use clap::Parser;
 use reqwest;
 
-
-
-
-use tokio_postgres::{NoTls};
+use tokio_postgres::NoTls;
 
 use trdr::cmc::fiat::Fiat;
 use trdr::cmc::{Response, API};
@@ -46,7 +43,7 @@ async fn main() -> Result<(), Error> {
     let url = req.url().as_str().to_string();
     let res: Response<Vec<Fiat>> = client.execute(req).await?.json().await?;
 
-    println!("STATUS: {:#?}", &res.status);
+    println!("{:#?}", &res.status);
     let update = res.status.insert(&pg, &url).await?;
 
     for fiat in res.data {
