@@ -45,14 +45,39 @@ CREATE TABLE fiats (
     -- The currency sign for this asset.
     sign TEXT,
     -- The ticker symbol for this asset, always in all caps.
-    symbol VARCHAR(3) UNIQUE,
+    symbol VARCHAR(3) UNIQUE NOT NULL,
 
     -- Last update operation to this value.
     -- The operation may not have changed any values.
     last_update INTEGER NOT NULL,
 
     -- Validation:
-    CONSTRAINT valid_symbol CHECK (symbol ~ '^[A-Z]{3}$' OR symbol IS NULL),
+    CONSTRAINT valid_symbol CHECK (symbol ~ '^[A-Z]{3}$'),
+
+    -- Foreign keys:
+    CONSTRAINT fk_last_update FOREIGN KEY (last_update) REFERENCES updates(id)
+);
+
+CREATE TYPE metal_unit AS ENUM ('ounce');
+
+-- API endpoint: /v1/fiat/map include_metals=true
+CREATE TABLE metals (
+    -- The unique CoinMarketCap ID for this asset.
+    id INTEGER PRIMARY KEY,
+    -- The name of this asset, without the unit.
+    name TEXT NOT NULL,
+    -- The ticker symbol (code) for this asset, always in all caps (undocumented).
+    code VARCHAR(3) UNIQUE NOT NULL,
+
+    -- Unit (exctracted from the name).
+    unit metal_unit NOT NULL,
+
+    -- Last update operation to this value.
+    -- The operation may not have changed any values.
+    last_update INTEGER NOT NULL,
+
+    -- Validation:
+    CONSTRAINT valid_code CHECK (code ~ '^[A-Z]{3}$'),
 
     -- Foreign keys:
     CONSTRAINT fk_last_update FOREIGN KEY (last_update) REFERENCES updates(id)
@@ -64,8 +89,6 @@ CREATE TYPE tracking_status AS ENUM ('active', 'inactive', 'untracked');
 CREATE TABLE cryptocurrencies (
     -- The unique cryptocurrency ID for this cryptocurrency.
     id INTEGER PRIMARY KEY,
-    -- (Undocumented) CoinMarketCap ranking.
-    rank INTEGER NOT NULL,
     -- The name of this cryptocurrency.
     name TEXT NOT NULL,
     -- The ticker symbol for this cryptocurrency, NOT always in all caps.
@@ -86,6 +109,9 @@ CREATE TABLE cryptocurrencies (
     platform INTEGER,
     -- The token address on the parent platform cryptocurrency.
     platform_token TEXT,
+
+    -- CoinMarketCap ranking (undocumented).
+    rank INTEGER NOT NULL,
 
     -- Last update operation to this value.
     -- The operation may not have changed any values.
