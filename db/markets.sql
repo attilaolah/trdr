@@ -10,13 +10,9 @@ CREATE DATABASE markets;
 CREATE TABLE updates (
     id SERIAL PRIMARY KEY,
 
-    -- Endpoint being updated, e.g. '/v1/fiat/map'.
-    endpoint TEXT NOT NULL,
-    -- Query string used, e.g. 'sort=id&include_metals=true'
-    query_parameters TEXT,
-
-    -- Raw response data. This is potentially cached.
-    response_sha256 varchar(64) NOT NULL,
+    -- URL, including the query string.
+    -- E.g. "https://sandbox-api.coinmarketcap.com/v1/fiat/map&include_metals=true".
+    url TEXT NOT NULL,
 
     -- Values below are returned by the API.
 
@@ -33,10 +29,7 @@ CREATE TABLE updates (
     elapsed INTERVAL NOT NULL,
 
     -- Notice from the server (undocumented).
-    notice TEXT,
-
-    -- Validation:
-    CONSTRAINT valid_response_sha256 CHECK (response_sha256 ~ '^[0-9a-f]{64}$')
+    notice TEXT
 );
 
 -- API endpoint: /v1/fiat/map
