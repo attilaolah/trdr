@@ -58,25 +58,26 @@ const INSERT_UPDATE: &str = "INSERT INTO updates (
     timestamp,
     elapsed,
     notice
-) VALUES ($1, $2, $3, $4, $5, make_interval(secs => $6), $7)";
+) VALUES ($1, $2, $3, $4, $5, make_interval(secs => $6), $7)
+RETURNING id";
 
 impl Status {
-    async fn insert(&self, pg: &Client, url: &str) -> Result<(), Error> {
-        pg.execute(
-            INSERT_UPDATE,
-            &[
-                &url,
-                &self.error_code,
-                &self.error_message,
-                &self.credit_count,
-                &self.timestamp.naive_utc(),
-                &self.elapsed().as_secs_f64(),
-                &self.notice,
-            ],
-        )
-        .await?;
-
-        Ok(())
+    async fn insert(&self, pg: &Client, url: &str) -> Result<i32, Error> {
+        Ok(pg
+            .query_one(
+                INSERT_UPDATE,
+                &[
+                    &url,
+                    &self.error_code,
+                    &self.error_message,
+                    &self.credit_count,
+                    &self.timestamp.naive_utc(),
+                    &self.elapsed().as_secs_f64(),
+                    &self.notice,
+                ],
+            )
+            .await?
+            .get(0))
     }
 
     fn elapsed(&self) -> Duration {
@@ -125,7 +126,7 @@ async fn main() -> Result<(), Error> {
     let res: Response = client.execute(req).await?.json().await?;
 
     println!("STATUS: {:#?}", &res.status);
-    res.status.insert(&pg, &url).await?;
+    println!("UPDATE: {}", res.status.insert(&pg, &url).await?);
 
     Ok(())
 }
