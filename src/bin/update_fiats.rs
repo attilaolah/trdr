@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use reqwest;
 use serde::Deserialize;
@@ -25,7 +26,7 @@ struct Status {
     error_code: i64,
     error_message: Option<String>,
     credit_count: i64,
-    timestamp: String,
+    timestamp: DateTime<Utc>,
     elapsed: i64,
     notice: Option<String>,
 }
