@@ -54,7 +54,10 @@ CREATE TABLE fiats (
     CONSTRAINT fk_last_update FOREIGN KEY (last_update) REFERENCES updates(id)
 );
 
-CREATE TYPE metal_unit AS ENUM ('ounce');
+CREATE TYPE metal_unit AS ENUM (
+    'ounce',
+    'troy_ounce'
+);
 
 -- API endpoint: /v1/fiat/map include_metals=true
 CREATE TABLE metals (
