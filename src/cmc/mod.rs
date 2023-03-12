@@ -2,7 +2,6 @@ use reqwest::RequestBuilder;
 use serde::Deserialize;
 
 use crate::cmc::status::Status;
-use crate::error::Error;
 
 pub mod fiat;
 pub mod status;
@@ -28,13 +27,6 @@ impl API {
             api_key: api_key.to_string(),
             client: reqwest::Client::new(),
         }
-    }
-
-    pub fn fiat_map(&self) -> Result<reqwest::Request, Error> {
-        Ok(self
-            .get("/v1/fiat/map")
-            .query(&[("include_metals", "true")])
-            .build()?)
     }
 
     fn get(&self, endpoint: &str) -> RequestBuilder {

@@ -4,6 +4,7 @@ use tokio_postgres::types::to_sql_checked;
 use tokio_postgres::types::{IsNull, ToSql, Type};
 use tokio_postgres::Client;
 
+use crate::cmc::{Response, API};
 use crate::error::Error;
 
 #[derive(Debug, Deserialize)]
@@ -18,6 +19,28 @@ pub struct Fiat {
 
 #[derive(Debug)]
 struct MetalUnit(Option<String>);
+
+impl API {
+    pub async fn update_fiats(&self, pg: &Client, metals: bool) -> Result<(), Error> {
+        let req = self.fiat_map(metals)?;
+        let url = req.url().as_str().to_string();
+        let res: Response<Vec<Fiat>> = self.client.execute(req).await?.json().await?;
+
+        let update = res.status.insert(&pg, &url).await?;
+        for fiat in res.data {
+            fiat.insert(&pg, update).await?;
+        }
+
+        Ok(())
+    }
+
+    fn fiat_map(&self, metals: bool) -> Result<reqwest::Request, Error> {
+        Ok(self
+            .get("/v1/fiat/map")
+            .query(&[("include_metals", metals)])
+            .build()?)
+    }
+}
 
 impl Fiat {
     pub async fn insert(&self, pg: &Client, update: i32) -> Result<(), Error> {
