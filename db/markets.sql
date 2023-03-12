@@ -20,17 +20,20 @@ CREATE TABLE updates (
 
     -- Values below are returned by the API.
 
-    -- Current timestamp on the server.
-    timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     -- An internal error code for the current error.
     -- If a unique platform error code is not available the HTTP status code is returned.
     error_code INTEGER,
     -- An error message to go along with the error code.
     error_message TEXT,
-    -- Amount of time taken to generate this response.
-    elapsed INTERVAL NOT NULL,
     -- Number of API call credits that were used for this call.
     credit_count INTEGER NOT NULL,
+    -- Current timestamp on the server.
+    timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    -- Amount of time taken to generate this response.
+    elapsed INTERVAL NOT NULL,
+
+    -- Notice from the server (undocumented).
+    notice TEXT,
 
     -- Validation:
     CONSTRAINT valid_response_sha256 CHECK (response_sha256 ~ '^[0-9a-f]{64}$')
