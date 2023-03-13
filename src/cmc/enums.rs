@@ -1,8 +1,6 @@
-use serde::Deserialize;
 use tokio_postgres::types::private::BytesMut;
 use tokio_postgres::types::to_sql_checked;
 use tokio_postgres::types::{IsNull, ToSql, Type};
-use tokio_postgres::Client;
 
 #[derive(Debug)]
 pub struct TrackingStatus(String);

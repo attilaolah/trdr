@@ -1,8 +1,6 @@
 use serde::Deserialize;
-use tokio_postgres::types::private::BytesMut;
-use tokio_postgres::types::to_sql_checked;
-use tokio_postgres::types::{IsNull, ToSql, Type};
-use tokio_postgres::Client;
+use tokio::join;
+use tokio_postgres::{Client, Statement};
 
 use crate::cmc::enums::MetalUnit;
 use crate::cmc::{Response, API};
@@ -25,9 +23,16 @@ impl API {
         let res: Response<Vec<Fiat>> = self.client.execute(req).await?.json().await?;
         res.status.check()?;
 
-        let update = res.status.insert(&pg, &url).await?;
+        let (stmt, stmt_metal, update) = join!(
+            pg.prepare(include_str!("sql/fiats_insert.sql")),
+            pg.prepare(include_str!("sql/metals_insert.sql")),
+            res.status.insert(&pg, &url),
+        );
+        let (stmt, stmt_metal, update) = (stmt?, stmt_metal?, update?);
+
+        // TODO: Insert all in a single statement.
         for fiat in res.data.unwrap_or(vec![]) {
-            fiat.insert(&pg, update).await?;
+            fiat.insert(&pg, &stmt, &stmt_metal, update).await?;
         }
 
         Ok(())
@@ -42,13 +47,19 @@ impl API {
 }
 
 impl Fiat {
-    pub async fn insert(&self, pg: &Client, update: i32) -> Result<(), Error> {
+    pub async fn insert(
+        &self,
+        pg: &Client,
+        stmt: &Statement,
+        stmt_metal: &Statement,
+        update: i32,
+    ) -> Result<(), Error> {
         if let Some(code) = &self.code {
             // Metals have a code instead of a symbol.
-            return self.insert_as_metal(pg, code, update).await;
+            return self.insert_as_metal(pg, stmt_metal, code, update).await;
         }
         pg.execute(
-            include_str!("sql/fiats_insert.sql"),
+            stmt,
             &[&self.id, &self.name, &self.sign, &self.symbol, &update],
         )
         .await?;
@@ -56,12 +67,18 @@ impl Fiat {
         Ok(())
     }
 
-    async fn insert_as_metal(&self, pg: &Client, code: &str, update: i32) -> Result<(), Error> {
+    async fn insert_as_metal(
+        &self,
+        pg: &Client,
+        stmt: &Statement,
+        code: &str,
+        update: i32,
+    ) -> Result<(), Error> {
         let unit = MetalUnit::from_suffix(&self.name).ok_or_else(|| {
             Error::new(format!("unknown unit for: {}", &self.name.to_lowercase()))
         })?;
         pg.execute(
-            include_str!("sql/metals_insert.sql"),
+            stmt,
             &[
                 &self.id,
                 &unit.trim_suffix(&self.name),

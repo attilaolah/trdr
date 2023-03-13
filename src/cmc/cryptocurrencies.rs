@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use tokio_postgres::Client;
+use tokio::join;
+use tokio_postgres::{Client, Statement};
 
-use crate::cmc::{Response, API};
 use crate::cmc::enums::TrackingStatus;
+use crate::cmc::{Response, API};
 use crate::error::Error;
 
 #[derive(Debug, Deserialize)]
@@ -33,9 +34,15 @@ impl API {
         let res: Response<Vec<Cryptocurrency>> = self.client.execute(req).await?.json().await?;
         res.status.check()?;
 
-        let update = res.status.insert(&pg, &url).await?;
+        let (stmt, update) = join!(
+            pg.prepare(include_str!("sql/cryptocurrencies_insert.sql")),
+            res.status.insert(&pg, &url),
+        );
+        let (stmt, update) = (stmt?, update?);
+
+        // TODO: Insert all in a single statement.
         for crypto in res.data.unwrap_or(vec![]) {
-            crypto.insert(&pg, update).await?;
+            crypto.insert(&pg, &stmt, update).await?;
         }
 
         Ok(())
@@ -66,9 +73,9 @@ impl API {
 }
 
 impl Cryptocurrency {
-    pub async fn insert(&self, pg: &Client, update: i32) -> Result<(), Error> {
+    pub async fn insert(&self, pg: &Client, stmt: &Statement, update: i32) -> Result<(), Error> {
         pg.execute(
-            include_str!("sql/cryptocurrencies_insert.sql"),
+            stmt,
             &[
                 &self.id,
                 &self.name,
