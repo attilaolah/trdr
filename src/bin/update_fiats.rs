@@ -1,5 +1,4 @@
 use clap::Parser;
-use tokio_postgres::NoTls;
 
 use trdr::args::Args;
 use trdr::error::Error;
@@ -8,13 +7,8 @@ use trdr::error::Error;
 async fn main() -> Result<(), Error> {
     let args = Args::parse();
 
+    let db = args.db_connect().await?;
     let cmc = args.cmc_api();
-    let (pg, conn) = tokio_postgres::connect(&args.db, NoTls).await?;
-    tokio::spawn(async move {
-        if let Err(e) = conn.await {
-            eprintln!("PG ERR: {}", e);
-        }
-    });
 
-    cmc.update_fiats(&pg, true).await
+    cmc.update_fiats(&db, true).await
 }
