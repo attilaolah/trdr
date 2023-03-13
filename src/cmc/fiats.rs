@@ -4,6 +4,7 @@ use tokio_postgres::types::to_sql_checked;
 use tokio_postgres::types::{IsNull, ToSql, Type};
 use tokio_postgres::Client;
 
+use crate::cmc::enums::MetalUnit;
 use crate::cmc::{Response, API};
 use crate::error::Error;
 
@@ -17,17 +18,15 @@ pub struct Fiat {
     code: Option<String>,
 }
 
-#[derive(Debug)]
-struct MetalUnit(Option<String>);
-
 impl API {
     pub async fn update_fiats(&self, pg: &Client, metals: bool) -> Result<(), Error> {
         let req = self.fiat_map(metals)?;
         let url = req.url().as_str().to_string();
         let res: Response<Vec<Fiat>> = self.client.execute(req).await?.json().await?;
+        res.status.check()?;
 
         let update = res.status.insert(&pg, &url).await?;
-        for fiat in res.data {
+        for fiat in res.data.unwrap_or(vec![]) {
             fiat.insert(&pg, update).await?;
         }
 
@@ -58,7 +57,9 @@ impl Fiat {
     }
 
     async fn insert_as_metal(&self, pg: &Client, code: &str, update: i32) -> Result<(), Error> {
-        let unit = MetalUnit::from_suffix(&self.name);
+        let unit = MetalUnit::from_suffix(&self.name).ok_or_else(|| {
+            Error::new(format!("unknown unit for: {}", &self.name.to_lowercase()))
+        })?;
         pg.execute(
             include_str!("sql/metals_insert.sql"),
             &[
@@ -73,52 +74,4 @@ impl Fiat {
 
         Ok(())
     }
-}
-
-impl MetalUnit {
-    fn from_suffix(name: &str) -> Self {
-        let lname = name.to_lowercase();
-        if lname.ends_with("troy ounce") {
-            MetalUnit(Some(String::from("troy_ounce")))
-        } else if lname.ends_with("ounce") {
-            MetalUnit(Some(String::from("ounce")))
-        } else {
-            MetalUnit(None)
-        }
-    }
-
-    fn trim_suffix<'a>(&'a self, name: &'a str) -> String {
-        if let Some(s) = &self.0 {
-            let len = s.len();
-            if name.len() >= len {
-                let end = name.len() - len;
-                if name[end..].replace(" ", "_").eq_ignore_ascii_case(s) {
-                    return name[..end].trim().to_string();
-                }
-            }
-        }
-
-        name.to_string()
-    }
-}
-
-impl ToSql for MetalUnit {
-    fn to_sql(
-        &self,
-        _ty: &Type,
-        out: &mut BytesMut,
-    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        if let Some(s) = &self.0 {
-            out.extend(s.bytes());
-            Ok(IsNull::No)
-        } else {
-            Ok(IsNull::Yes)
-        }
-    }
-
-    fn accepts(ty: &Type) -> bool {
-        ty.name() == "metal_unit"
-    }
-
-    to_sql_checked!();
 }

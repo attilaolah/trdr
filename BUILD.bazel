@@ -3,13 +3,19 @@ load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 rust_binary(
+    name = "update_cryptocurrencies",
+    srcs = ["src/bin/update_cryptocurrencies.rs"],
+    aliases = aliases(normal = True),
+    edition = "2021",
+    deps = ["//:trdr"] + all_crate_deps(normal = True)
+)
+
+rust_binary(
     name = "update_fiats",
     srcs = ["src/bin/update_fiats.rs"],
     aliases = aliases(normal = True),
     edition = "2021",
-    deps = all_crate_deps(normal = True) + [
-        "//:trdr",
-    ],
+    deps = ["//:trdr"] + all_crate_deps(normal = True)
 )
 
 rust_library(

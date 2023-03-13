@@ -17,6 +17,16 @@ pub struct Status {
 }
 
 impl Status {
+    pub fn check(&self) -> Result<(), Error> {
+        match self.error_code {
+            0 => Ok(()),
+            code => Err(Error::new_with_code(
+                self.error_message.as_ref().unwrap_or(&"".to_string()),
+                code,
+            )),
+        }
+    }
+
     pub async fn insert(&self, pg: &Client, url: &str) -> Result<i32, Error> {
         Ok(pg
             .query_one(

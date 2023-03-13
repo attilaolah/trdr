@@ -11,8 +11,9 @@ CREATE TABLE updates (
     id SERIAL PRIMARY KEY,
 
     -- URL, including the query string.
-    -- E.g. "https://sandbox-api.coinmarketcap.com/v1/fiat/map&include_metals=true".
-    url TEXT NOT NULL CHECK (url ~ '^https://'),
+    -- E.g. "https://pro-api.coinmarketcap.com/v1/fiat/map&include_metals=true".
+    -- HTTPS is optional to allow using a local mirror during development.
+    url TEXT NOT NULL CHECK (url ~ '^https?://'),
 
     -- Values below are returned by the API.
 
@@ -26,7 +27,7 @@ CREATE TABLE updates (
     -- Current timestamp on the server.
     timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     -- Amount of time taken to generate this response.
-    elapsed INTERVAL NOT NULL CHECK (elapsed > interval '0'),
+    elapsed INTERVAL NOT NULL CHECK (elapsed >= interval '0'),
 
     -- Notice from the server (undocumented).
     notice TEXT CHECK (notice <> '')
@@ -96,9 +97,6 @@ CREATE TABLE cryptocurrencies (
     platform INTEGER REFERENCES cryptocurrencies(id),
     -- The token address on the parent platform cryptocurrency.
     platform_token TEXT CHECK (platform_token <> ''),
-
-    -- CoinMarketCap ranking (undocumented).
-    rank INTEGER NOT NULL CHECK (rank > 0),
 
     -- Last update operation to this value.
     -- The operation may not have changed any values.
