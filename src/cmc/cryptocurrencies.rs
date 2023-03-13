@@ -6,6 +6,7 @@ use tokio_postgres::{Client, Statement};
 use crate::cmc::enums::TrackingStatus;
 use crate::cmc::{Response, API};
 use crate::error::Error;
+use crate::sql::upsert_into;
 
 #[derive(Debug, Deserialize)]
 pub struct Cryptocurrency {
@@ -24,7 +25,7 @@ pub struct Cryptocurrency {
 struct Platform {
     id: i32,
     token_address: String,
-    // NOTE: [name, symbol, slug] ignored.
+    // Ignored: [name, symbol, slug].
 }
 
 impl API {
@@ -34,10 +35,22 @@ impl API {
         let res: Response<Vec<Cryptocurrency>> = self.client.execute(req).await?.json().await?;
         res.status.check()?;
 
-        let (stmt, update) = join!(
-            pg.prepare(include_str!("sql/cryptocurrencies_insert.sql")),
-            res.status.insert(&pg, &url),
+        let stmt_text = upsert_into(
+            "cryptocurrencies",
+            &[
+                "id",
+                "name",
+                "symbol",
+                "slug",
+                "is_active",
+                "status",
+                "first_historical_data",
+                "last_historical_data",
+                "last_update",
+            ],
+            "id",
         );
+        let (stmt, update) = join!(pg.prepare(&stmt_text), res.status.insert(&pg, &url));
         let (stmt, update) = (stmt?, update?);
 
         // TODO: Insert all in a single statement.

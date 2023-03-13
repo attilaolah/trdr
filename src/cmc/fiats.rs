@@ -5,6 +5,7 @@ use tokio_postgres::{Client, Statement};
 use crate::cmc::enums::MetalUnit;
 use crate::cmc::{Response, API};
 use crate::error::Error;
+use crate::sql::upsert_into;
 
 #[derive(Debug, Deserialize)]
 pub struct Fiat {
@@ -23,9 +24,20 @@ impl API {
         let res: Response<Vec<Fiat>> = self.client.execute(req).await?.json().await?;
         res.status.check()?;
 
+        let stmt_text = upsert_into(
+            "fiats",
+            &["id", "name", "sign", "symbol", "last_update"],
+            "id",
+        );
+        let stmt_metal_text = upsert_into(
+            "metals",
+            &["id", "name", "code", "unit", "last_update"],
+            "id",
+        );
+
         let (stmt, stmt_metal, update) = join!(
-            pg.prepare(include_str!("sql/fiats_insert.sql")),
-            pg.prepare(include_str!("sql/metals_insert.sql")),
+            pg.prepare(&stmt_text),
+            pg.prepare(&stmt_metal_text),
             res.status.insert(&pg, &url),
         );
         let (stmt, stmt_metal, update) = (stmt?, stmt_metal?, update?);
