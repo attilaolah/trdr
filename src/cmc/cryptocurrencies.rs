@@ -1,21 +1,23 @@
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use tokio::join;
-use tokio_postgres::{Client, Statement};
+use tokio_postgres::Client;
 
 use crate::cmc::enums::TrackingStatus;
 use crate::cmc::{Response, API};
 use crate::error::Error;
-use crate::sql::upsert_into;
+use crate::sql::{upsert_into, SqlVals, MAX_PARAMS};
 
 #[derive(Debug, Deserialize)]
-pub struct Cryptocurrency {
+struct Cryptocurrency {
     id: i32,
     name: String,
     symbol: String,
     slug: String,
-    is_active: i32,
-    status: String,
+    #[serde(deserialize_with = "parse_bool")]
+    is_active: bool,
+    #[serde(deserialize_with = "TrackingStatus::parse")]
+    status: TrackingStatus,
     first_historical_data: Option<DateTime<Utc>>,
     last_historical_data: Option<DateTime<Utc>>,
     platform: Option<Platform>,
@@ -35,27 +37,21 @@ impl API {
         let res: Response<Vec<Cryptocurrency>> = self.client.execute(req).await?.json().await?;
         res.status.check()?;
 
-        let stmt_text = upsert_into(
-            "cryptocurrencies",
-            &[
-                "id",
-                "name",
-                "symbol",
-                "slug",
-                "is_active",
-                "status",
-                "first_historical_data",
-                "last_historical_data",
-                "last_update",
-            ],
-            "id",
-        );
-        let (stmt, update) = join!(pg.prepare(&stmt_text), res.status.insert(&pg, &url));
-        let (stmt, update) = (stmt?, update?);
+        for data in res
+            .data
+            .unwrap_or(vec![])
+            .chunks(Cryptocurrency::chunk_size())
+        {
+            let stmt_text = Cryptocurrency::upsert_into(data.len());
+            let (stmt, update) = join!(pg.prepare(&stmt_text), res.status.insert(&pg, &url));
+            let (stmt, update) = (stmt?, update?);
 
-        // TODO: Insert all in a single statement.
-        for crypto in res.data.unwrap_or(vec![]) {
-            crypto.insert(&pg, &stmt, update).await?;
+            let vals: SqlVals = data
+                .iter()
+                .flat_map(|c| vec![c.sql_vals(), vec![&update]].into_iter().flatten())
+                .collect();
+            // TODO: Await all statements in parallel!
+            pg.execute(&stmt, vals.as_slice()).await?;
         }
 
         Ok(())
@@ -86,23 +82,42 @@ impl API {
 }
 
 impl Cryptocurrency {
-    pub async fn insert(&self, pg: &Client, stmt: &Statement, update: i32) -> Result<(), Error> {
-        pg.execute(
-            stmt,
-            &[
-                &self.id,
-                &self.name,
-                &self.symbol,
-                &self.slug,
-                &(if self.is_active == 0 { false } else { true }),
-                &TrackingStatus::new(&self.status),
-                &self.first_historical_data.map(|dt| dt.naive_utc()),
-                &self.last_historical_data.map(|dt| dt.naive_utc()),
-                &update,
-            ],
-        )
-        .await?;
-
-        Ok(())
+    const COLS: &[&'static str] = &[
+        "id",
+        "name",
+        "symbol",
+        "slug",
+        "is_active",
+        "status",
+        "first_historical_data",
+        "last_historical_data",
+        "last_update",
+    ];
+    fn sql_vals(&self) -> SqlVals {
+        vec![
+            &self.id,
+            &self.name,
+            &self.symbol,
+            &self.slug,
+            &self.is_active,
+            &self.status,
+            &self.first_historical_data,
+            &self.last_historical_data,
+        ]
     }
+
+    fn upsert_into(n: usize) -> String {
+        upsert_into("cryptocurrencies", Self::COLS, n, "id")
+    }
+
+    fn chunk_size() -> usize {
+        MAX_PARAMS / Self::COLS.len()
+    }
+}
+
+fn parse_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(u32::deserialize(deserializer)? != 0)
 }

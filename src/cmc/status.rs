@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::time::Duration;
 use tokio_postgres::Client;
 
@@ -11,8 +11,8 @@ pub struct Status {
     error_message: Option<String>,
     credit_count: i32,
     timestamp: DateTime<Utc>,
-    #[serde(rename = "elapsed")]
-    elapsed_ms: u64,
+    #[serde(deserialize_with = "duration_ms")]
+    elapsed: Duration,
     notice: Option<String>,
 }
 
@@ -36,16 +36,19 @@ impl Status {
                     &self.error_code,
                     &self.error_message,
                     &self.credit_count,
-                    &self.timestamp.naive_utc(),
-                    &self.elapsed().as_secs_f64(),
+                    &self.timestamp,
+                    &self.elapsed.as_secs_f64(),
                     &self.notice,
                 ],
             )
             .await?
             .get(0))
     }
+}
 
-    fn elapsed(&self) -> Duration {
-        Duration::from_millis(self.elapsed_ms)
-    }
+fn duration_ms<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Duration::from_millis(u64::deserialize(deserializer)?))
 }

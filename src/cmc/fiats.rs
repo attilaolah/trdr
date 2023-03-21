@@ -1,51 +1,74 @@
 use serde::Deserialize;
 use tokio::join;
-use tokio_postgres::{Client, Statement};
+use tokio_postgres::Client;
 
 use crate::cmc::enums::MetalUnit;
 use crate::cmc::{Response, API};
 use crate::error::Error;
-use crate::sql::upsert_into;
+use crate::sql::{upsert_into, SqlVals};
 
 #[derive(Debug, Deserialize)]
-pub struct Fiat {
+struct FiatMetal {
     id: i32,
     name: String,
-    sign: Option<String>,
+    symbol: String,       // fiats only
+    sign: Option<String>, // fiats only
+    code: Option<String>, // metals only
+}
 
+struct Fiat {
+    id: i32,
+    name: String,
+    sign: String,
     symbol: String,
-    code: Option<String>,
+}
+
+struct Metal {
+    id: i32,
+    name: String,
+    code: String,
+    unit: Option<MetalUnit>,
 }
 
 impl API {
     pub async fn update_fiats(&self, pg: &Client, metals: bool) -> Result<(), Error> {
         let req = self.fiat_map(metals)?;
         let url = req.url().as_str().to_string();
-        let res: Response<Vec<Fiat>> = self.client.execute(req).await?.json().await?;
+        let res: Response<Vec<FiatMetal>> = self.client.execute(req).await?.json().await?;
         res.status.check()?;
 
-        let stmt_text = upsert_into(
-            "fiats",
-            &["id", "name", "sign", "symbol", "last_update"],
-            "id",
-        );
-        let stmt_metal_text = upsert_into(
-            "metals",
-            &["id", "name", "code", "unit", "last_update"],
-            "id",
-        );
+        let data = res
+            .data
+            .ok_or(Error::new("response contains no data".to_string()))?;
 
-        let (stmt, stmt_metal, update) = join!(
-            pg.prepare(&stmt_text),
-            pg.prepare(&stmt_metal_text),
+        let (fiats, metals): (Vec<FiatMetal>, Vec<FiatMetal>) =
+            data.into_iter().partition(|fm| fm.is_fiat());
+        let fiats: Vec<Fiat> = fiats.into_iter().map(|f| f.as_fiat()).flatten().collect();
+        let metals: Vec<Metal> = metals.into_iter().map(|m| m.as_metal()).flatten().collect();
+
+        let stmt_fiats_text = Fiat::upsert_into(fiats.len());
+        let stmt_metals_text = Metal::upsert_into(metals.len());
+        let (stmt_fiats, stmt_metals, update) = join!(
+            pg.prepare(&stmt_fiats_text),
+            pg.prepare(&stmt_metals_text),
             res.status.insert(&pg, &url),
         );
-        let (stmt, stmt_metal, update) = (stmt?, stmt_metal?, update?);
+        let (stmt_fiats, stmt_metals, update) = (stmt_fiats?, stmt_metals?, update?);
 
-        // TODO: Insert all in a single statement.
-        for fiat in res.data.unwrap_or(vec![]) {
-            fiat.insert(&pg, &stmt, &stmt_metal, update).await?;
-        }
+        let fiats_vals: SqlVals = fiats
+            .iter()
+            .flat_map(|f| vec![f.sql_vals(), vec![&update]].into_iter().flatten())
+            .collect();
+        let metals_vals: SqlVals = metals
+            .iter()
+            .flat_map(|m| vec![m.sql_vals(), vec![&update]].into_iter().flatten())
+            .collect();
+
+        let (insert_fiats, insert_metals) = join!(
+            pg.execute(&stmt_fiats, fiats_vals.as_slice()),
+            pg.execute(&stmt_metals, metals_vals.as_slice()),
+        );
+        (insert_fiats?, insert_metals?);
 
         Ok(())
     }
@@ -58,49 +81,65 @@ impl API {
     }
 }
 
-impl Fiat {
-    pub async fn insert(
-        &self,
-        pg: &Client,
-        stmt: &Statement,
-        stmt_metal: &Statement,
-        update: i32,
-    ) -> Result<(), Error> {
-        if let Some(code) = &self.code {
-            // Metals have a code instead of a symbol.
-            return self.insert_as_metal(pg, stmt_metal, code, update).await;
+impl FiatMetal {
+    fn is_fiat(&self) -> bool {
+        self.sign.is_some() && self.code.is_none()
+    }
+    fn as_fiat(self) -> Option<Fiat> {
+        match self.sign {
+            Some(sign) => Some(Fiat {
+                id: self.id,
+                name: self.name,
+                sign: sign,
+                symbol: self.symbol,
+            }),
+            None => None,
         }
-        pg.execute(
-            stmt,
-            &[&self.id, &self.name, &self.sign, &self.symbol, &update],
-        )
-        .await?;
-
-        Ok(())
     }
 
-    async fn insert_as_metal(
-        &self,
-        pg: &Client,
-        stmt: &Statement,
-        code: &str,
-        update: i32,
-    ) -> Result<(), Error> {
-        let unit = MetalUnit::from_suffix(&self.name).ok_or_else(|| {
-            Error::new(format!("unknown unit for: {}", &self.name.to_lowercase()))
-        })?;
-        pg.execute(
-            stmt,
-            &[
-                &self.id,
-                &unit.trim_suffix(&self.name),
-                &code,
-                &unit,
-                &update,
-            ],
-        )
-        .await?;
+    fn as_metal(self) -> Option<Metal> {
+        match self.code {
+            Some(code) => {
+                let unit = MetalUnit::from_suffix(&self.name);
+                Some(Metal {
+                    id: self.id,
+                    name: match &unit {
+                        Some(unit) => unit.trim_suffix(&self.name),
+                        None => self.name,
+                    },
+                    code: code,
+                    unit: unit,
+                })
+            }
+            None => None,
+        }
+    }
+}
 
-        Ok(())
+impl Fiat {
+    fn sql_vals(&self) -> SqlVals {
+        vec![&self.id, &self.name, &self.sign, &self.symbol]
+    }
+    fn upsert_into(n: usize) -> String {
+        upsert_into(
+            "fiats",
+            &["id", "name", "sign", "symbol", "last_update"],
+            n,
+            "id",
+        )
+    }
+}
+
+impl Metal {
+    fn sql_vals(&self) -> SqlVals {
+        vec![&self.id, &self.name, &self.code, &self.unit]
+    }
+    fn upsert_into(n: usize) -> String {
+        upsert_into(
+            "metals",
+            &["id", "name", "code", "unit", "last_update"],
+            n,
+            "id",
+        )
     }
 }

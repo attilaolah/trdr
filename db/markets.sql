@@ -25,7 +25,7 @@ CREATE TABLE updates (
     -- Number of API call credits that were used for this call.
     credit_count INTEGER NOT NULL CHECK (credit_count >= 0),
     -- Current timestamp on the server.
-    timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     -- Amount of time taken to generate this response.
     elapsed INTERVAL NOT NULL CHECK (elapsed >= interval '0'),
 
@@ -89,9 +89,9 @@ CREATE TABLE cryptocurrencies (
     -- The listing status of the cryptocurrency.
     status tracking_status NOT NULL,
     -- Timestamp of the date this cryptocurrency was first available on the platform.
-    first_historical_data TIMESTAMP WITHOUT TIME ZONE,
+    first_historical_data TIMESTAMP WITH TIME ZONE,
     -- Timestamp of the last time this cryptocurrency's market data was updated.
-    last_historical_data TIMESTAMP WITHOUT TIME ZONE,
+    last_historical_data TIMESTAMP WITH TIME ZONE,
 
     -- Metadata about the parent cryptocurrency platform this cryptocurrency belongs to if it is a token.
     platform INTEGER REFERENCES cryptocurrencies(id),
@@ -118,10 +118,10 @@ CREATE TABLE exchanges (
     status tracking_status NOT NULL,
     -- Timestamp of the earliest market data record available to query using our historical endpoints.
     -- NULL if there is no historical data currently available for this exchange.
-    first_historical_data TIMESTAMP WITHOUT TIME ZONE,
+    first_historical_data TIMESTAMP WITH TIME ZONE,
     -- Timestamp of the latest market data record available to query using our historical endpoints.
     -- null if there is no historical data currently available for this exchange.
-    last_historical_data TIMESTAMP WITHOUT TIME ZONE,
+    last_historical_data TIMESTAMP WITH TIME ZONE,
 
     -- Last update operation to this value.
     -- The operation may not have changed any values.
@@ -151,7 +151,7 @@ CREATE TABLE exchange_infos (
     -- Reported all time spot volume in the specified currency.
     spot_volume_usd NUMERIC(20,8) CHECK (spot_volume_usd >= 0),
     -- Reported last update time of the spot volume.
-    spot_volume_last_updated TIMESTAMP WITHOUT TIME ZONE,
+    spot_volume_last_updated TIMESTAMP WITH TIME ZONE,
 
     -- Last update operation to this value.
     -- The operation may not have changed any values.

@@ -1,3 +1,4 @@
+use serde::{Deserialize, Deserializer};
 use tokio_postgres::types::private::BytesMut;
 use tokio_postgres::types::to_sql_checked;
 use tokio_postgres::types::{IsNull, ToSql, Type};
@@ -11,6 +12,13 @@ pub struct MetalUnit(String);
 impl TrackingStatus {
     pub fn new(value: &str) -> Self {
         Self(value.to_lowercase())
+    }
+
+    pub fn parse<'de, D>(deserializer: D) -> Result<TrackingStatus, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(TrackingStatus::new(&String::deserialize(deserializer)?))
     }
 }
 
