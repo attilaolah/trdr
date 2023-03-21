@@ -117,29 +117,25 @@ impl FiatMetal {
 }
 
 impl Fiat {
+    const COLS: &[&'static str] = &["id", "name", "sign", "symbol", "last_update"];
+
     fn sql_vals(&self) -> SqlVals {
         vec![&self.id, &self.name, &self.sign, &self.symbol]
     }
+
     fn upsert_into(n: usize) -> String {
-        upsert_into(
-            "fiats",
-            &["id", "name", "sign", "symbol", "last_update"],
-            n,
-            "id",
-        )
+        upsert_into("fiats", Self::COLS, n, Self::COLS[0])
     }
 }
 
 impl Metal {
+    const COLS: &[&'static str] = &["id", "name", "code", "unit", "last_update"];
+
     fn sql_vals(&self) -> SqlVals {
         vec![&self.id, &self.name, &self.code, &self.unit]
     }
+
     fn upsert_into(n: usize) -> String {
-        upsert_into(
-            "metals",
-            &["id", "name", "code", "unit", "last_update"],
-            n,
-            "id",
-        )
+        upsert_into("metals", Self::COLS, n, Self::COLS[0])
     }
 }

@@ -32,10 +32,13 @@ struct Platform {
 
 impl API {
     pub async fn update_cryptocurrencies(&self, pg: &Client) -> Result<(), Error> {
+        // TODO: Paginate!
         let req = self.cryptocurrency_map()?;
         let url = req.url().as_str().to_string();
         let res: Response<Vec<Cryptocurrency>> = self.client.execute(req).await?.json().await?;
         res.status.check()?;
+
+        let update = res.status.insert(&pg, &url).await?;
 
         for data in res
             .data
@@ -43,8 +46,8 @@ impl API {
             .chunks(Cryptocurrency::chunk_size())
         {
             let stmt_text = Cryptocurrency::upsert_into(data.len());
-            let (stmt, update) = join!(pg.prepare(&stmt_text), res.status.insert(&pg, &url));
-            let (stmt, update) = (stmt?, update?);
+            // TODO: If chunk size did not change, do not re-prepare!
+            let stmt = pg.prepare(&stmt_text).await?;
 
             let vals: SqlVals = data
                 .iter()
@@ -93,6 +96,7 @@ impl Cryptocurrency {
         "last_historical_data",
         "last_update",
     ];
+
     fn sql_vals(&self) -> SqlVals {
         vec![
             &self.id,
@@ -107,7 +111,7 @@ impl Cryptocurrency {
     }
 
     fn upsert_into(n: usize) -> String {
-        upsert_into("cryptocurrencies", Self::COLS, n, "id")
+        upsert_into("cryptocurrencies", Self::COLS, n, Self::COLS[0])
     }
 
     fn chunk_size() -> usize {
