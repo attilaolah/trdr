@@ -1,0 +1,25 @@
+proxy_temp_path       /tmp/cache-tmp;
+proxy_cache_path      /tmp/cache-cmc keys_zone=cmc:16m;
+
+server {
+  listen 1100;
+
+  location /cmc/ {
+    proxy_pass https://pro-api.coinmarketcap.com/v1/;
+
+    proxy_cache cmc;
+    proxy_cache_key $request_uri;
+    proxy_cache_valid 200 20m;
+
+    proxy_ssl_server_name on;
+
+    proxy_set_header Accept application/json;
+    proxy_set_header X-CMC_PRO_API_KEY ${CMC_PRO_API_KEY};
+
+    proxy_ignore_headers Cache-Control;
+    proxy_hide_header Cache-Control;
+    proxy_hide_header Vary;
+    proxy_hide_header Via;
+    proxy_hide_header X-Cache;
+  }
+}
