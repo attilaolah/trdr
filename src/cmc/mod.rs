@@ -9,11 +9,8 @@ pub mod status;
 pub mod cryptocurrencies;
 pub mod fiats;
 
-const API_HEADER: &str = "X-CMC_PRO_API_KEY";
-
 pub struct API {
     endpoint: String,
-    api_key: String,
     client: reqwest::Client,
 }
 
@@ -24,10 +21,9 @@ pub struct Response<T> {
 }
 
 impl API {
-    pub fn new(endpoint: &str, api_key: &str) -> Self {
+    pub fn new(endpoint: &str) -> Self {
         Self {
             endpoint: endpoint.to_string(),
-            api_key: api_key.to_string(),
             client: reqwest::Client::new(),
         }
     }
@@ -36,6 +32,5 @@ impl API {
         self.client
             .get([&self.endpoint, endpoint].join(""))
             .header("Accept", "application/json")
-            .header(API_HEADER, &self.api_key)
     }
 }

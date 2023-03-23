@@ -62,7 +62,7 @@ impl API {
 
     fn cryptocurrency_map(&self) -> Result<reqwest::Request, Error> {
         Ok(self
-            .get("/v1/cryptocurrency/map")
+            .get("/cryptocurrency/map")
             .query(&[
                 (
                     "listing_status",

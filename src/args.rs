@@ -8,13 +8,9 @@ use crate::error::Error;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    /// CoinMarketCap API endpoint
-    #[arg(long, default_value = "https://sandbox-api.coinmarketcap.com")]
-    cmc_endpoint: String,
-
-    /// CoinMarketCap API key
-    #[arg(long, default_value = "b54bcf4d-1bca-4e8e-9a24-22ff2c3d462c")]
-    cmc_api_key: String,
+    /// API endpoint (proxy)
+    #[arg(long, default_value = "http://127.0.0.1:1100")]
+    api: String,
 
     /// PostgreSQL database host or socket path
     #[arg(long, default_value = "/var/run/postgresql")]
@@ -35,7 +31,7 @@ pub struct Args {
 
 impl Args {
     pub fn cmc_api(&self) -> cmc::API {
-        cmc::API::new(&self.cmc_endpoint, &self.cmc_api_key)
+        cmc::API::new(&format!("{}/cmc", &self.api))
     }
 
     pub async fn db_connect(&self) -> Result<Client, Error> {

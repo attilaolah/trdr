@@ -75,7 +75,7 @@ impl API {
 
     fn fiat_map(&self, metals: bool) -> Result<reqwest::Request, Error> {
         Ok(self
-            .get("/v1/fiat/map")
+            .get("/fiat/map")
             .query(&[("include_metals", metals)])
             .build()?)
     }
