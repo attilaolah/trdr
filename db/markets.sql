@@ -93,16 +93,17 @@ CREATE TABLE cryptocurrencies (
     -- Timestamp of the last time this cryptocurrency's market data was updated.
     last_historical_data TIMESTAMP WITH TIME ZONE,
 
-    -- Metadata about the parent cryptocurrency platform this cryptocurrency belongs to if it is a token.
-    platform INTEGER REFERENCES cryptocurrencies(id) CHECK (
-        (platform IS NULL) = (platform_token IS NULL)
-    ),
-    -- The token address on the parent platform cryptocurrency.
-    platform_token TEXT CHECK (platform_token <> ''),
-
     -- Last update operation to this value.
     -- The operation may not have changed any values.
     last_update INTEGER NOT NULL REFERENCES updates(id)
+);
+
+CREATE TABLE cryptocurrency_platforms (
+    id INTEGER PRIMARY KEY REFERENCES cryptocurrencies(id),
+    -- Metadata about the parent cryptocurrency platform this cryptocurrency belongs to if it is a token.
+    platform INTEGER NOT NULL REFERENCES cryptocurrencies(id),
+    -- The token address on the parent platform cryptocurrency.
+    token_address TEXT NOT NULL CHECK (token_address <> '')
 );
 
 -- API endpoint: /v1/exchange/map 

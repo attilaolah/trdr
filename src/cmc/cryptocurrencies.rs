@@ -31,13 +31,68 @@ struct Platform {
 
 impl API {
     pub async fn update_cryptocurrencies(&self, pg: &Client) -> Result<usize, Error> {
-        let mut total = 0;
+        // First download all cryptocurrencies, page-by-page.
+        // For each object, store the corresponding "update" value.
+        let mut data: Vec<(Cryptocurrency, i32)> = vec![];
+
         loop {
-            let fetched = update_cryptocurrencies(self, pg, total + 1).await?;
-            total += fetched;
-            if fetched == 0 {
+            let req = self.cryptocurrency_map(data.len() + 1)?;
+            let url = req.url().as_str().to_string();
+            let res: Response<Vec<Cryptocurrency>> = self.client.execute(req).await?.json().await?;
+            res.status.check()?;
+
+            if res.data.as_ref().map_or(true, |v| v.is_empty()) {
                 break;
             }
+
+            match res.data {
+                Some(page) => {
+                    if page.is_empty() {
+                        break;
+                    }
+                    let update = res.status.insert(&pg, &url).await?;
+                    data.extend(page.into_iter().map(|c| (c, update)));
+                }
+                None => break,
+            }
+        }
+        let data = data; // freeze
+        let total = data.len();
+
+        // Then insert them in chunks.
+        let mut stmt_size: usize = 0;
+        let mut stmt: Option<Statement> = None;
+
+        for chunk in data.chunks(Cryptocurrency::chunk_size()) {
+            if chunk.len() != stmt_size || stmt.is_none() {
+                stmt_size = chunk.len();
+                let stmt_text = Cryptocurrency::upsert_into(stmt_size);
+                stmt = Some(pg.prepare(&stmt_text).await?);
+            }
+            let vals: SqlVals = chunk
+                .iter()
+                .flat_map(|(c, u)| vec![c.sql_vals(), vec![u]].into_iter().flatten())
+                .collect();
+            pg.execute(stmt.as_ref().unwrap(), vals.as_slice()).await?;
+        }
+
+        // Finally, update any platform references in a second run.
+        let platforms: Vec<_> = data
+            .into_iter()
+            .map(|(c, _)| c)
+            .filter_map(|c| c.platform.map(|p| (p, c.id)))
+            .collect();
+        stmt_size = 0;
+        stmt = None;
+
+        for chunk in platforms.chunks(Platform::chunk_size()) {
+            if chunk.len() != stmt_size || stmt.is_none() {
+                stmt_size = chunk.len();
+                let stmt_text = Platform::upsert_into(stmt_size);
+                stmt = Some(pg.prepare(&stmt_text).await?);
+            }
+            let vals: SqlVals = chunk.iter().flat_map(|(p, id)| p.sql_vals(id)).collect();
+            pg.execute(stmt.as_ref().unwrap(), vals.as_slice()).await?;
         }
 
         Ok(total)
@@ -69,6 +124,7 @@ impl API {
 }
 
 impl Cryptocurrency {
+    const TBL: &str = "cryptocurrencies";
     const COLS: &[&'static str] = &[
         "id",
         "name",
@@ -78,8 +134,6 @@ impl Cryptocurrency {
         "status",
         "first_historical_data",
         "last_historical_data",
-        "platform",
-        "platform_token",
         "last_update",
     ];
 
@@ -97,7 +151,7 @@ impl Cryptocurrency {
     }
 
     fn upsert_into(n: usize) -> String {
-        upsert_into("cryptocurrencies", Self::COLS, n, Self::COLS[0])
+        upsert_into(Self::TBL, Self::COLS, n, Self::COLS[0])
     }
 
     fn chunk_size() -> usize {
@@ -106,14 +160,19 @@ impl Cryptocurrency {
 }
 
 impl Platform {
-    fn sql_vals(&self) -> SqlVals {
-        vec![&self.id, &self.token_address]
+    const TBL: &str = "cryptocurrency_platforms";
+    const COLS: &[&'static str] = &["id", "platform", "token_address"];
+
+    fn sql_vals<'a>(&'a self, id: &'a i32) -> SqlVals {
+        vec![id, &self.id, &self.token_address]
     }
-    fn sql_vals_or_none(p: &Option<Self>) -> SqlVals {
-        match p {
-            Some(p) => p.sql_vals(),
-            None => vec![&None::<i32>, &None::<&str>],
-        }
+
+    fn upsert_into(n: usize) -> String {
+        upsert_into(Self::TBL, Self::COLS, n, Self::COLS[0])
+    }
+
+    fn chunk_size() -> usize {
+        MAX_PARAMS / Self::COLS.len()
     }
 }
 
@@ -122,44 +181,4 @@ where
     D: Deserializer<'de>,
 {
     Ok(u32::deserialize(deserializer)? != 0)
-}
-
-async fn update_cryptocurrencies(api: &API, pg: &Client, page: usize) -> Result<usize, Error> {
-    let req = api.cryptocurrency_map(page)?;
-    let url = req.url().as_str().to_string();
-    let res: Response<Vec<Cryptocurrency>> = api.client.execute(req).await?.json().await?;
-    res.status.check()?;
-
-    let mut stmt_size: usize = 0;
-    let mut stmt: Option<Statement> = None;
-    let update = res.status.insert(&pg, &url).await?;
-
-    Ok(match res.data {
-        Some(data) => {
-            let mut total = 0;
-            for chunk in data.chunks(Cryptocurrency::chunk_size()) {
-                if chunk.len() != stmt_size || stmt.is_none() {
-                    stmt_size = chunk.len();
-                    let stmt_text = Cryptocurrency::upsert_into(stmt_size);
-                    stmt = Some(pg.prepare(&stmt_text).await?);
-                }
-                let vals: SqlVals = chunk
-                    .iter()
-                    .flat_map(|c| {
-                        vec![
-                            c.sql_vals(),
-                            Platform::sql_vals_or_none(&c.platform),
-                            vec![&update],
-                        ]
-                        .into_iter()
-                        .flatten()
-                    })
-                    .collect();
-                pg.execute(stmt.as_ref().unwrap(), vals.as_slice()).await?;
-                total += chunk.len();
-            }
-            total
-        }
-        None => 0,
-    })
 }
