@@ -12,7 +12,7 @@ CREATE TABLE updates (
 
     -- URL, including the query string.
     -- E.g. "https://pro-api.coinmarketcap.com/v1/fiat/map&include_metals=true".
-    -- HTTPS is optional to allow using a local mirror during development.
+    -- HTTPS is optional to allow using a reverse proxy running in the same cluster.
     url TEXT NOT NULL CHECK (url ~ '^https?://'),
 
     -- Values below are returned by the API.
@@ -94,14 +94,15 @@ CREATE TABLE cryptocurrencies (
     last_historical_data TIMESTAMP WITH TIME ZONE,
 
     -- Metadata about the parent cryptocurrency platform this cryptocurrency belongs to if it is a token.
-    platform INTEGER REFERENCES cryptocurrencies(id),
+    platform INTEGER REFERENCES cryptocurrencies(id) CHECK (
+        (platform IS NULL) = (platform_token IS NULL)
+    ),
     -- The token address on the parent platform cryptocurrency.
     platform_token TEXT CHECK (platform_token <> ''),
 
     -- Last update operation to this value.
     -- The operation may not have changed any values.
     last_update INTEGER NOT NULL REFERENCES updates(id)
-
 );
 
 -- API endpoint: /v1/exchange/map 
@@ -158,8 +159,8 @@ CREATE TABLE exchange_infos (
     last_update INTEGER NOT NULL REFERENCES updates(id)
 );
 CREATE TABLE exchange_fiats (
-    id INTEGER REFERENCES exchanges(id),
-    symbol VARCHAR(3) REFERENCES fiats(symbol),
+    id INTEGER NOT NULL REFERENCES exchanges(id),
+    symbol VARCHAR(3) NOT NULL REFERENCES fiats(symbol),
     PRIMARY KEY (id, symbol)
 );
 CREATE TYPE exchange_url_kind AS ENUM (
@@ -170,7 +171,7 @@ CREATE TYPE exchange_url_kind AS ENUM (
     'fee'
 );
 CREATE TABLE exchange_urls (
-    id INTEGER REFERENCES exchanges(id),
+    id INTEGER NOT NULL REFERENCES exchanges(id),
     kind exchange_url_kind NOT NULL,
     url TEXT NOT NULL CHECK (url ~ '^https://')
 );
