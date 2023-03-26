@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer};
 use tokio::join;
-use tokio_postgres::Client;
+use tokio_postgres::{Client, Statement};
 
 use crate::cmc::enums::TrackingStatus;
 use crate::cmc::{Response, API};
@@ -117,20 +117,24 @@ async fn update_cryptocurrencies(api: &API, pg: &Client, page: usize) -> Result<
     let res: Response<Vec<Cryptocurrency>> = api.client.execute(req).await?.json().await?;
     res.status.check()?;
 
+    let mut stmt_size: usize = 0;
+    let mut stmt: Option<Statement> = None;
+    let update = res.status.insert(&pg, &url).await?;
+
     Ok(match res.data {
         Some(data) => {
             let mut total = 0;
-            let update = res.status.insert(&pg, &url).await?;
             for chunk in data.chunks(Cryptocurrency::chunk_size()) {
-                let stmt_text = Cryptocurrency::upsert_into(chunk.len());
-                // TODO: If chunk size did not change, do not re-prepare!
-                let stmt = pg.prepare(&stmt_text).await?;
-
+                if chunk.len() != stmt_size || stmt.is_none() {
+                    stmt_size = chunk.len();
+                    let stmt_text = Cryptocurrency::upsert_into(stmt_size);
+                    stmt = Some(pg.prepare(&stmt_text).await?);
+                }
                 let vals: SqlVals = chunk
                     .iter()
                     .flat_map(|c| vec![c.sql_vals(), vec![&update]].into_iter().flatten())
                     .collect();
-                pg.execute(&stmt, vals.as_slice()).await?;
+                pg.execute(stmt.as_ref().unwrap(), vals.as_slice()).await?;
                 total += chunk.len();
             }
             total
