@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer};
-use tokio::join;
 use tokio_postgres::{Client, Statement};
 
 use crate::cmc::enums::TrackingStatus;
@@ -79,6 +78,8 @@ impl Cryptocurrency {
         "status",
         "first_historical_data",
         "last_historical_data",
+        "platform",
+        "platform_token",
         "last_update",
     ];
 
@@ -101,6 +102,18 @@ impl Cryptocurrency {
 
     fn chunk_size() -> usize {
         MAX_PARAMS / Self::COLS.len()
+    }
+}
+
+impl Platform {
+    fn sql_vals(&self) -> SqlVals {
+        vec![&self.id, &self.token_address]
+    }
+    fn sql_vals_or_none(p: &Option<Self>) -> SqlVals {
+        match p {
+            Some(p) => p.sql_vals(),
+            None => vec![&None::<i32>, &None::<&str>],
+        }
     }
 }
 
@@ -132,7 +145,15 @@ async fn update_cryptocurrencies(api: &API, pg: &Client, page: usize) -> Result<
                 }
                 let vals: SqlVals = chunk
                     .iter()
-                    .flat_map(|c| vec![c.sql_vals(), vec![&update]].into_iter().flatten())
+                    .flat_map(|c| {
+                        vec![
+                            c.sql_vals(),
+                            Platform::sql_vals_or_none(&c.platform),
+                            vec![&update],
+                        ]
+                        .into_iter()
+                        .flatten()
+                    })
                     .collect();
                 pg.execute(stmt.as_ref().unwrap(), vals.as_slice()).await?;
                 total += chunk.len();
