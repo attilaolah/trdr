@@ -10,5 +10,8 @@ async fn main() -> Result<(), Error> {
     let db = args.db_connect().await?;
     let cmc = args.cmc_api();
 
-    cmc.update_fiats(&db, true).await
+    let (fiats, metals) = cmc.update_fiats(&db, true).await?;
+    println!("INFO: Imported {} fiats, {} metals.", fiats, metals);
+
+    Ok(())
 }

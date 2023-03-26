@@ -31,36 +31,20 @@ struct Platform {
 }
 
 impl API {
-    pub async fn update_cryptocurrencies(&self, pg: &Client) -> Result<(), Error> {
-        // TODO: Paginate!
-        let req = self.cryptocurrency_map()?;
-        let url = req.url().as_str().to_string();
-        let res: Response<Vec<Cryptocurrency>> = self.client.execute(req).await?.json().await?;
-        res.status.check()?;
-
-        let update = res.status.insert(&pg, &url).await?;
-
-        for data in res
-            .data
-            .unwrap_or(vec![])
-            .chunks(Cryptocurrency::chunk_size())
-        {
-            let stmt_text = Cryptocurrency::upsert_into(data.len());
-            // TODO: If chunk size did not change, do not re-prepare!
-            let stmt = pg.prepare(&stmt_text).await?;
-
-            let vals: SqlVals = data
-                .iter()
-                .flat_map(|c| vec![c.sql_vals(), vec![&update]].into_iter().flatten())
-                .collect();
-            // TODO: Await all statements in parallel!
-            pg.execute(&stmt, vals.as_slice()).await?;
+    pub async fn update_cryptocurrencies(&self, pg: &Client) -> Result<usize, Error> {
+        let mut total = 0;
+        loop {
+            let fetched = update_cryptocurrencies(self, pg, total + 1).await?;
+            total += fetched;
+            if fetched == 0 {
+                break;
+            }
         }
 
-        Ok(())
+        Ok(total)
     }
 
-    fn cryptocurrency_map(&self) -> Result<reqwest::Request, Error> {
+    fn cryptocurrency_map(&self, start: usize) -> Result<reqwest::Request, Error> {
         Ok(self
             .get("/cryptocurrency/map")
             .query(&[
@@ -79,6 +63,7 @@ impl API {
                     ]
                     .join(","),
                 ),
+                ("start", start.to_string()),
             ])
             .build()?)
     }
@@ -124,4 +109,32 @@ where
     D: Deserializer<'de>,
 {
     Ok(u32::deserialize(deserializer)? != 0)
+}
+
+async fn update_cryptocurrencies(api: &API, pg: &Client, page: usize) -> Result<usize, Error> {
+    let req = api.cryptocurrency_map(page)?;
+    let url = req.url().as_str().to_string();
+    let res: Response<Vec<Cryptocurrency>> = api.client.execute(req).await?.json().await?;
+    res.status.check()?;
+
+    Ok(match res.data {
+        Some(data) => {
+            let mut total = 0;
+            let update = res.status.insert(&pg, &url).await?;
+            for chunk in data.chunks(Cryptocurrency::chunk_size()) {
+                let stmt_text = Cryptocurrency::upsert_into(chunk.len());
+                // TODO: If chunk size did not change, do not re-prepare!
+                let stmt = pg.prepare(&stmt_text).await?;
+
+                let vals: SqlVals = chunk
+                    .iter()
+                    .flat_map(|c| vec![c.sql_vals(), vec![&update]].into_iter().flatten())
+                    .collect();
+                pg.execute(&stmt, vals.as_slice()).await?;
+                total += chunk.len();
+            }
+            total
+        }
+        None => 0,
+    })
 }

@@ -31,7 +31,7 @@ struct Metal {
 }
 
 impl API {
-    pub async fn update_fiats(&self, pg: &Client, metals: bool) -> Result<(), Error> {
+    pub async fn update_fiats(&self, pg: &Client, metals: bool) -> Result<(usize, usize), Error> {
         let req = self.fiat_map(metals)?;
         let url = req.url().as_str().to_string();
         let res: Response<Vec<FiatMetal>> = self.client.execute(req).await?.json().await?;
@@ -70,7 +70,7 @@ impl API {
         );
         (insert_fiats?, insert_metals?);
 
-        Ok(())
+        Ok((fiats.len(), metals.len()))
     }
 
     fn fiat_map(&self, metals: bool) -> Result<reqwest::Request, Error> {
